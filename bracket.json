@@ -1,394 +1,74 @@
 {
   "East": [
-    {
-      "name": "East 1-seed",
-      "seed": 1,
-      "region": "East",
-      "strength": 3.5
-    },
-    {
-      "name": "East 16-seed",
-      "seed": 16,
-      "region": "East",
-      "strength": 0.1
-    },
-    {
-      "name": "East 8-seed",
-      "seed": 8,
-      "region": "East",
-      "strength": 0.9
-    },
-    {
-      "name": "East 9-seed",
-      "seed": 9,
-      "region": "East",
-      "strength": 0.8
-    },
-    {
-      "name": "East 5-seed",
-      "seed": 5,
-      "region": "East",
-      "strength": 1.35
-    },
-    {
-      "name": "East 12-seed",
-      "seed": 12,
-      "region": "East",
-      "strength": 0.58
-    },
-    {
-      "name": "East 4-seed",
-      "seed": 4,
-      "region": "East",
-      "strength": 1.65
-    },
-    {
-      "name": "East 13-seed",
-      "seed": 13,
-      "region": "East",
-      "strength": 0.42
-    },
-    {
-      "name": "East 6-seed",
-      "seed": 6,
-      "region": "East",
-      "strength": 1.15
-    },
-    {
-      "name": "East 11-seed",
-      "seed": 11,
-      "region": "East",
-      "strength": 0.65
-    },
-    {
-      "name": "East 3-seed",
-      "seed": 3,
-      "region": "East",
-      "strength": 2.0
-    },
-    {
-      "name": "East 14-seed",
-      "seed": 14,
-      "region": "East",
-      "strength": 0.32
-    },
-    {
-      "name": "East 7-seed",
-      "seed": 7,
-      "region": "East",
-      "strength": 1.0
-    },
-    {
-      "name": "East 10-seed",
-      "seed": 10,
-      "region": "East",
-      "strength": 0.72
-    },
-    {
-      "name": "East 2-seed",
-      "seed": 2,
-      "region": "East",
-      "strength": 2.5
-    },
-    {
-      "name": "East 15-seed",
-      "seed": 15,
-      "region": "East",
-      "strength": 0.22
-    }
+    {"name": "Duke", "seed": 1, "region": "East", "strength": 0.0},
+    {"name": "Siena", "seed": 16, "region": "East", "strength": 0.0},
+    {"name": "Ohio State", "seed": 8, "region": "East", "strength": 0.0},
+    {"name": "TCU", "seed": 9, "region": "East", "strength": 0.0},
+    {"name": "St. John's", "seed": 5, "region": "East", "strength": 0.0},
+    {"name": "Northern Iowa", "seed": 12, "region": "East", "strength": 0.0},
+    {"name": "Kansas", "seed": 4, "region": "East", "strength": 0.0},
+    {"name": "Cal Baptist", "seed": 13, "region": "East", "strength": 0.0},
+    {"name": "Louisville", "seed": 6, "region": "East", "strength": 0.0},
+    {"name": "South Florida", "seed": 11, "region": "East", "strength": 0.0},
+    {"name": "Michigan State", "seed": 3, "region": "East", "strength": 0.0},
+    {"name": "North Dakota State", "seed": 14, "region": "East", "strength": 0.0},
+    {"name": "UCLA", "seed": 7, "region": "East", "strength": 0.0},
+    {"name": "UCF", "seed": 10, "region": "East", "strength": 0.0},
+    {"name": "UConn", "seed": 2, "region": "East", "strength": 0.0},
+    {"name": "Furman", "seed": 15, "region": "East", "strength": 0.0}
   ],
   "West": [
-    {
-      "name": "West 1-seed",
-      "seed": 1,
-      "region": "West",
-      "strength": 3.5
-    },
-    {
-      "name": "West 16-seed",
-      "seed": 16,
-      "region": "West",
-      "strength": 0.1
-    },
-    {
-      "name": "West 8-seed",
-      "seed": 8,
-      "region": "West",
-      "strength": 0.9
-    },
-    {
-      "name": "West 9-seed",
-      "seed": 9,
-      "region": "West",
-      "strength": 0.8
-    },
-    {
-      "name": "West 5-seed",
-      "seed": 5,
-      "region": "West",
-      "strength": 1.35
-    },
-    {
-      "name": "West 12-seed",
-      "seed": 12,
-      "region": "West",
-      "strength": 0.58
-    },
-    {
-      "name": "West 4-seed",
-      "seed": 4,
-      "region": "West",
-      "strength": 1.65
-    },
-    {
-      "name": "West 13-seed",
-      "seed": 13,
-      "region": "West",
-      "strength": 0.42
-    },
-    {
-      "name": "West 6-seed",
-      "seed": 6,
-      "region": "West",
-      "strength": 1.15
-    },
-    {
-      "name": "West 11-seed",
-      "seed": 11,
-      "region": "West",
-      "strength": 0.65
-    },
-    {
-      "name": "West 3-seed",
-      "seed": 3,
-      "region": "West",
-      "strength": 2.0
-    },
-    {
-      "name": "West 14-seed",
-      "seed": 14,
-      "region": "West",
-      "strength": 0.32
-    },
-    {
-      "name": "West 7-seed",
-      "seed": 7,
-      "region": "West",
-      "strength": 1.0
-    },
-    {
-      "name": "West 10-seed",
-      "seed": 10,
-      "region": "West",
-      "strength": 0.72
-    },
-    {
-      "name": "West 2-seed",
-      "seed": 2,
-      "region": "West",
-      "strength": 2.5
-    },
-    {
-      "name": "West 15-seed",
-      "seed": 15,
-      "region": "West",
-      "strength": 0.22
-    }
+    {"name": "Arizona", "seed": 1, "region": "West", "strength": 0.0},
+    {"name": "LIU", "seed": 16, "region": "West", "strength": 0.0},
+    {"name": "Villanova", "seed": 8, "region": "West", "strength": 0.0},
+    {"name": "Utah State", "seed": 9, "region": "West", "strength": 0.0},
+    {"name": "Wisconsin", "seed": 5, "region": "West", "strength": 0.0},
+    {"name": "High Point", "seed": 12, "region": "West", "strength": 0.0},
+    {"name": "Arkansas", "seed": 4, "region": "West", "strength": 0.0},
+    {"name": "Hawaii", "seed": 13, "region": "West", "strength": 0.0},
+    {"name": "BYU", "seed": 6, "region": "West", "strength": 0.0},
+    {"name": "Texas/NC State", "seed": 11, "region": "West", "strength": 0.0},
+    {"name": "Gonzaga", "seed": 3, "region": "West", "strength": 0.0},
+    {"name": "Kennesaw State", "seed": 14, "region": "West", "strength": 0.0},
+    {"name": "Miami", "seed": 7, "region": "West", "strength": 0.0},
+    {"name": "Missouri", "seed": 10, "region": "West", "strength": 0.0},
+    {"name": "Purdue", "seed": 2, "region": "West", "strength": 0.0},
+    {"name": "Queens", "seed": 15, "region": "West", "strength": 0.0}
   ],
   "South": [
-    {
-      "name": "South 1-seed",
-      "seed": 1,
-      "region": "South",
-      "strength": 3.5
-    },
-    {
-      "name": "South 16-seed",
-      "seed": 16,
-      "region": "South",
-      "strength": 0.1
-    },
-    {
-      "name": "South 8-seed",
-      "seed": 8,
-      "region": "South",
-      "strength": 0.9
-    },
-    {
-      "name": "South 9-seed",
-      "seed": 9,
-      "region": "South",
-      "strength": 0.8
-    },
-    {
-      "name": "South 5-seed",
-      "seed": 5,
-      "region": "South",
-      "strength": 1.35
-    },
-    {
-      "name": "South 12-seed",
-      "seed": 12,
-      "region": "South",
-      "strength": 0.58
-    },
-    {
-      "name": "South 4-seed",
-      "seed": 4,
-      "region": "South",
-      "strength": 1.65
-    },
-    {
-      "name": "South 13-seed",
-      "seed": 13,
-      "region": "South",
-      "strength": 0.42
-    },
-    {
-      "name": "South 6-seed",
-      "seed": 6,
-      "region": "South",
-      "strength": 1.15
-    },
-    {
-      "name": "South 11-seed",
-      "seed": 11,
-      "region": "South",
-      "strength": 0.65
-    },
-    {
-      "name": "South 3-seed",
-      "seed": 3,
-      "region": "South",
-      "strength": 2.0
-    },
-    {
-      "name": "South 14-seed",
-      "seed": 14,
-      "region": "South",
-      "strength": 0.32
-    },
-    {
-      "name": "South 7-seed",
-      "seed": 7,
-      "region": "South",
-      "strength": 1.0
-    },
-    {
-      "name": "South 10-seed",
-      "seed": 10,
-      "region": "South",
-      "strength": 0.72
-    },
-    {
-      "name": "South 2-seed",
-      "seed": 2,
-      "region": "South",
-      "strength": 2.5
-    },
-    {
-      "name": "South 15-seed",
-      "seed": 15,
-      "region": "South",
-      "strength": 0.22
-    }
+    {"name": "Florida", "seed": 1, "region": "South", "strength": 0.0},
+    {"name": "PV A&M/Lehigh", "seed": 16, "region": "South", "strength": 0.0},
+    {"name": "Clemson", "seed": 8, "region": "South", "strength": 0.0},
+    {"name": "Iowa", "seed": 9, "region": "South", "strength": 0.0},
+    {"name": "Vanderbilt", "seed": 5, "region": "South", "strength": 0.0},
+    {"name": "McNeese", "seed": 12, "region": "South", "strength": 0.0},
+    {"name": "Nebraska", "seed": 4, "region": "South", "strength": 0.0},
+    {"name": "Troy", "seed": 13, "region": "South", "strength": 0.0},
+    {"name": "North Carolina", "seed": 6, "region": "South", "strength": 0.0},
+    {"name": "VCU", "seed": 11, "region": "South", "strength": 0.0},
+    {"name": "Illinois", "seed": 3, "region": "South", "strength": 0.0},
+    {"name": "Penn", "seed": 14, "region": "South", "strength": 0.0},
+    {"name": "Saint Mary's", "seed": 7, "region": "South", "strength": 0.0},
+    {"name": "Texas A&M", "seed": 10, "region": "South", "strength": 0.0},
+    {"name": "Houston", "seed": 2, "region": "South", "strength": 0.0},
+    {"name": "Idaho", "seed": 15, "region": "South", "strength": 0.0}
   ],
   "Midwest": [
-    {
-      "name": "Midwest 1-seed",
-      "seed": 1,
-      "region": "Midwest",
-      "strength": 3.5
-    },
-    {
-      "name": "Midwest 16-seed",
-      "seed": 16,
-      "region": "Midwest",
-      "strength": 0.1
-    },
-    {
-      "name": "Midwest 8-seed",
-      "seed": 8,
-      "region": "Midwest",
-      "strength": 0.9
-    },
-    {
-      "name": "Midwest 9-seed",
-      "seed": 9,
-      "region": "Midwest",
-      "strength": 0.8
-    },
-    {
-      "name": "Midwest 5-seed",
-      "seed": 5,
-      "region": "Midwest",
-      "strength": 1.35
-    },
-    {
-      "name": "Midwest 12-seed",
-      "seed": 12,
-      "region": "Midwest",
-      "strength": 0.58
-    },
-    {
-      "name": "Midwest 4-seed",
-      "seed": 4,
-      "region": "Midwest",
-      "strength": 1.65
-    },
-    {
-      "name": "Midwest 13-seed",
-      "seed": 13,
-      "region": "Midwest",
-      "strength": 0.42
-    },
-    {
-      "name": "Midwest 6-seed",
-      "seed": 6,
-      "region": "Midwest",
-      "strength": 1.15
-    },
-    {
-      "name": "Midwest 11-seed",
-      "seed": 11,
-      "region": "Midwest",
-      "strength": 0.65
-    },
-    {
-      "name": "Midwest 3-seed",
-      "seed": 3,
-      "region": "Midwest",
-      "strength": 2.0
-    },
-    {
-      "name": "Midwest 14-seed",
-      "seed": 14,
-      "region": "Midwest",
-      "strength": 0.32
-    },
-    {
-      "name": "Midwest 7-seed",
-      "seed": 7,
-      "region": "Midwest",
-      "strength": 1.0
-    },
-    {
-      "name": "Midwest 10-seed",
-      "seed": 10,
-      "region": "Midwest",
-      "strength": 0.72
-    },
-    {
-      "name": "Midwest 2-seed",
-      "seed": 2,
-      "region": "Midwest",
-      "strength": 2.5
-    },
-    {
-      "name": "Midwest 15-seed",
-      "seed": 15,
-      "region": "Midwest",
-      "strength": 0.22
-    }
+    {"name": "Michigan", "seed": 1, "region": "Midwest", "strength": 0.0},
+    {"name": "UMBC/Howard", "seed": 16, "region": "Midwest", "strength": 0.0},
+    {"name": "Georgia", "seed": 8, "region": "Midwest", "strength": 0.0},
+    {"name": "Saint Louis", "seed": 9, "region": "Midwest", "strength": 0.0},
+    {"name": "Texas Tech", "seed": 5, "region": "Midwest", "strength": 0.0},
+    {"name": "Akron", "seed": 12, "region": "Midwest", "strength": 0.0},
+    {"name": "Alabama", "seed": 4, "region": "Midwest", "strength": 0.0},
+    {"name": "Hofstra", "seed": 13, "region": "Midwest", "strength": 0.0},
+    {"name": "Tennessee", "seed": 6, "region": "Midwest", "strength": 0.0},
+    {"name": "Miami OH/SMU", "seed": 11, "region": "Midwest", "strength": 0.0},
+    {"name": "Virginia", "seed": 3, "region": "Midwest", "strength": 0.0},
+    {"name": "Wright State", "seed": 14, "region": "Midwest", "strength": 0.0},
+    {"name": "Kentucky", "seed": 7, "region": "Midwest", "strength": 0.0},
+    {"name": "Santa Clara", "seed": 10, "region": "Midwest", "strength": 0.0},
+    {"name": "Iowa State", "seed": 2, "region": "Midwest", "strength": 0.0},
+    {"name": "Tennessee State", "seed": 15, "region": "Midwest", "strength": 0.0}
   ]
 }

@@ -217,6 +217,65 @@ def _parse_groups(groups: list) -> Optional[dict[str, list[Team]]]:
 
 # ─── Live Odds Integration ────────────────────────────────────────────────────
 
+import re as _re
+
+def _norm(name: str) -> str:
+    """Normalize a team name for fuzzy matching.
+
+    Handles:
+      - Special chars / apostrophes  (Hawai'i → hawaii)
+      - Parentheticals               (Miami (OH) → miami)
+      - 'St' mid/end-of-name → State (Michigan St → michigan state)
+        but NOT at the start        (St. John's stays st johns)
+      - Strips nickname suffix words that appear after the school name
+        (handled by the multi-strategy caller, not here)
+    """
+    s = name.lower()
+    s = _re.sub(r"['\u2018\u2019\u02bb`]", '', s)   # apostrophes + Hawaiian ʻokina
+    s = _re.sub(r'\(.*?\)', '', s)              # parentheticals
+    s = _re.sub(r'[^a-z0-9& ]', ' ', s)        # periods, slashes, etc.
+    s = _re.sub(r'\s+', ' ', s).strip()
+    # Expand "st" → "state" only when NOT the first token
+    tokens = s.split()
+    if len(tokens) > 1:
+        tokens = [tokens[0]] + ['state' if t == 'st' else t for t in tokens[1:]]
+    return ' '.join(tokens)
+
+
+def _match_odds_name(odds_name: str, bracket_norm: list[tuple[str, str]]) -> Optional[str]:
+    """Return the original bracket team name that best matches odds_name, or None.
+
+    bracket_norm: list of (normalized_name, original_name) sorted longest-first
+    so that more-specific names (e.g. 'iowa state') beat shorter ones ('iowa').
+
+    Strategy order:
+      1. Exact match after normalization
+      2. Bracket name is a substring of the normalized odds name (longest first)
+      3. Strip trailing nickname words one-at-a-time, retry strategy 2
+    """
+    norm = _norm(odds_name)
+    words = norm.split()
+
+    # 1. Exact
+    for nb, orig in bracket_norm:
+        if norm == nb:
+            return orig
+
+    # 2. Bracket name ⊆ odds name (longest bracket name wins)
+    for nb, orig in bracket_norm:
+        if nb in norm:
+            return orig
+
+    # 3. Strip trailing words (nickname removal) then retry
+    for trim in range(1, min(4, len(words))):
+        prefix = ' '.join(words[:-trim])
+        for nb, orig in bracket_norm:
+            if nb == prefix or nb in prefix:
+                return orig
+
+    return None
+
+
 def fetch_odds_api(api_key: str, bracket: dict[str, list[Team]]) -> dict[str, float]:
     """
     Pull NCAAB moneylines from The Odds API and convert to Bradley-Terry strengths.
@@ -266,24 +325,28 @@ def fetch_odds_api(api_key: str, bracket: dict[str, list[Team]]) -> dict[str, fl
     if not team_probs:
         return {}
 
-    # Build a name → team lookup
+    # Build lookup: (normalized_name, original_name), sorted longest-first so
+    # more-specific names (e.g. "iowa state") beat shorter ones ("iowa").
     name_to_team: dict[str, Team] = {}
     for teams in bracket.values():
         for t in teams:
-            name_to_team[t.name.lower()] = t
+            name_to_team[t.name] = t
+
+    bracket_norm = sorted(
+        [(_norm(t.name), t.name) for t in name_to_team.values()],
+        key=lambda x: -len(x[0]),
+    )
 
     strengths: dict[str, float] = {}
     for odds_name, prob in team_probs.items():
-        key = odds_name.lower()
-        # Fuzzy match
-        match = next((name for name in name_to_team if key in name or name in key), None)
+        match = _match_odds_name(odds_name, bracket_norm)
         if match:
             # Convert championship probability to strength via logistic scaling.
             # Empirically, 1-seeds win ~20% of titles → prob ~0.20 → strength 3.5
             # Scale: strength = reference_strength * (p / p_reference)
             ref_prob = 0.20
             ref_strength = 3.50
-            strengths[name_to_team[match].name] = ref_strength * (prob / ref_prob)
+            strengths[match] = ref_strength * (prob / ref_prob)
 
     print(f"  Matched odds for {len(strengths)} teams")
     return strengths
