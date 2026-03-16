@@ -423,24 +423,55 @@ def run_simulations(bracket: dict[str, list[Team]], n: int) -> np.ndarray:
     print(f"    {n:,}/{n:,} simulations complete in {time.time()-t0:.1f}s")
     return wins_matrix
 
+
+def compute_path_ratios(all_teams: list[Team], wins_matrix: np.ndarray) -> np.ndarray:
+    """
+    For each team, compute path_ratio = mean_wins[team] / avg_mean_wins_for_same_seed.
+
+    A value > 1.0 means a favorable bracket draw — this team is expected to win more
+    games than a typical team at their seed, either because their region is weaker or
+    because they are in a more open quadrant.  A value < 1.0 means a tougher draw.
+
+    Used in the opponent ownership model (people notice easy draws) and displayed
+    in output tables so you can see which teams benefit from path advantages.
+    """
+    mean_wins = wins_matrix.mean(axis=0)  # shape (n_teams,)
+
+    seed_buckets: dict[int, list[float]] = defaultdict(list)
+    for t in all_teams:
+        seed_buckets[t.seed].append(float(mean_wins[t.idx]))
+
+    seed_avg = {seed: float(np.mean(vals)) for seed, vals in seed_buckets.items()}
+
+    path_ratios = np.ones(len(all_teams))
+    for t in all_teams:
+        denom = max(seed_avg.get(t.seed, 1.0), 1e-9)
+        # Clamp displayed ratio to [0.5, 2.0] — extreme outliers (e.g. 16-seeds
+        # with near-zero mean wins) produce unstable ratios that mislead the output.
+        path_ratios[t.idx] = float(np.clip(mean_wins[t.idx] / denom, 0.5, 2.0))
+
+    return path_ratios
+
 # ─── Opponent Modeling ────────────────────────────────────────────────────────
 
-def _ownership_prob(seed: int, strength_ratio: float) -> float:
+def _ownership_prob(seed: int, strength_ratio: float, path_ratio: float = 1.0) -> float:
     """
     Probability a random pool participant picks this team.
 
     Calibrated from 47-player pool (2025 data):
       - Base rates reflect observed seed preferences across the pool.
-      - The moneyline multiplier (strength_ratio^1.8) was fitted to match
-        observed extremes: Colorado St (12-seed, -148 favourite → 81% owned)
-        vs McNeese (12-seed, +268 underdog → 11% owned).
+      - strength_ratio^1.8 multiplier fitted to observed extremes:
+          Colorado St (12-seed, -148 fav → 81% owned) vs
+          McNeese    (12-seed, +268 dog → 11% owned).
+      - path_ratio^0.6 multiplier for bracket draw difficulty:
+          path_ratio > 1 = easier draw → more picks (lower exponent than
+          strength because casual players notice paths less than moneylines).
 
     strength_ratio = team.strength / SEED_STRENGTH[seed]
-      > 1 means the team is stronger than a typical team at that seed (per odds).
+      > 1 means stronger than a typical team at that seed (per odds).
+    path_ratio = team's mean sim wins / avg mean sim wins for same seed
+      > 1 means a favorable bracket draw.
     """
-    # Base pick rate by seed — how often this pool picks each seed absent odds info.
-    # Derived from 2025 pool: seeds 11–12 dominate (~40–45%), mid-seeds moderate,
-    # top/bottom seeds rarely chosen.
     seed_base = {
         1: 0.02, 2: 0.04, 3: 0.06,
         4: 0.16, 5: 0.26, 6: 0.21,
@@ -449,9 +480,54 @@ def _ownership_prob(seed: int, strength_ratio: float) -> float:
         13: 0.18, 14: 0.06, 15: 0.03, 16: 0.01,
     }
     base = seed_base.get(seed, 0.10)
-    # Moneyline multiplier — exponent 1.8 calibrated to 2025 observed spread
-    ml_factor = min(strength_ratio ** 1.8, 2.5)
-    return min(base * ml_factor, 0.92)
+    ml_factor   = min(strength_ratio ** 1.8, 2.5)   # moneyline signal
+    path_factor = min(path_ratio    ** 0.6, 1.8)    # bracket-draw signal
+    return min(base * ml_factor * path_factor, 0.92)
+
+
+def compute_r1_strength_ratios(all_teams: list[Team], bracket: dict[str, list[Team]]) -> np.ndarray:
+    """
+    Compute per-team moneyline strength ratios for use in _ownership_prob.
+
+    Uses: actual_R1_win_prob / seed_expected_R1_win_prob
+
+    This keeps ratios near 1.0 for teams whose odds match their seed expectation,
+    and avoids the saturation bug caused by comparing inflated H2H-derived BT
+    strengths against the much smaller SEED_STRENGTH baseline values.
+
+    Teams without odds (First Four TBDs, no match) get ratio = 1.0 (seed baseline).
+    """
+    ratios = np.ones(len(all_teams))
+    for region_teams in bracket.values():
+        for i in range(0, 16, 2):
+            t1, t2 = region_teams[i], region_teams[i + 1]
+            # Seed-expected R1 win probabilities
+            s1, s2 = SEED_STRENGTH[t1.seed], SEED_STRENGTH[t2.seed]
+            seed_p1 = s1 / (s1 + s2)
+            seed_p2 = 1.0 - seed_p1
+            # Actual R1 win probabilities from current (odds-calibrated) strengths
+            denom = t1.strength + t2.strength
+            if denom < 1e-9:
+                continue
+            actual_p1 = t1.strength / denom
+            actual_p2 = 1.0 - actual_p1
+            ratios[t1.idx] = actual_p1 / max(seed_p1, 1e-9)
+            ratios[t2.idx] = actual_p2 / max(seed_p2, 1e-9)
+    return ratios
+
+
+def compute_ownership_probs(
+    all_teams: list[Team],
+    bracket: dict[str, list[Team]],
+    path_ratios: np.ndarray,
+) -> np.ndarray:
+    """Return per-team ownership probability array (fraction of opponents expected to pick each team)."""
+    n = len(all_teams)
+    strength_ratios = compute_r1_strength_ratios(all_teams, bracket)
+    return np.array([
+        _ownership_prob(all_teams[i].seed, strength_ratios[i], float(path_ratios[i]))
+        for i in range(n)
+    ])
 
 
 def build_opponent_max_scores(
@@ -460,6 +536,8 @@ def build_opponent_max_scores(
     pool_size: int,
     portfolio_size: int,
     rng: random.Random,
+    path_ratios: np.ndarray,
+    bracket: dict[str, list[Team]],
 ) -> np.ndarray:
     """
     Simulate pool_size-1 opponent portfolios using empirically calibrated pick
@@ -468,18 +546,15 @@ def build_opponent_max_scores(
 
     Each opponent portfolio is sampled via the Gumbel-max trick (weighted
     sampling without replacement), with per-opponent log-prob noise to capture
-    individual variation. This replaces the old heuristic strategy buckets with
-    a single principled model grounded in observed 2025 ownership rates.
+    individual variation.
+
+    pick probability = base_rate(seed) × r1_ratio^1.8 × path_ratio^0.6
+      - r1_ratio:   actual R1 win prob / seed-expected R1 win prob
+                    (near 1.0 for typical teams, avoids BT-scale saturation)
+      - path_ratio: bracket-draw signal (sim mean wins vs seed peers)
     """
     n = len(all_teams)
-    baseline_str = np.array([SEED_STRENGTH.get(t.seed, 0.5) for t in all_teams])
-    actual_str    = np.array([t.strength for t in all_teams])
-    strength_ratios = actual_str / np.maximum(baseline_str, 1e-6)
-
-    pick_probs = np.array([
-        _ownership_prob(all_teams[i].seed, strength_ratios[i])
-        for i in range(n)
-    ])
+    pick_probs = compute_ownership_probs(all_teams, bracket, path_ratios)
     log_probs = np.log(pick_probs + 1e-10)
 
     n_opponents = pool_size - 1
@@ -510,6 +585,8 @@ def win_probability(portfolio: list[int], points_matrix: np.ndarray, max_opp: np
 def optimize_portfolio(
     all_teams: list[Team],
     points_matrix: np.ndarray,
+    path_ratios: np.ndarray,
+    bracket: dict[str, list[Team]],
     pool_size: int,
     portfolio_size: int,
     sa_steps: int,
@@ -520,13 +597,16 @@ def optimize_portfolio(
 
     Move: swap one team in the portfolio with one outside.
     Temperature schedule: exponential decay from T_max → T_min.
+
+    path_ratios: per-team bracket-draw factors from compute_path_ratios().
+    bracket: needed to compute R1 win-prob ratios for the opponent model.
     """
     rng = random.Random(0)
     ev = points_matrix.mean(axis=0)
     n_teams = len(all_teams)
 
     print("  Modeling opponent field...")
-    max_opp = build_opponent_max_scores(all_teams, points_matrix, pool_size, portfolio_size, rng)
+    max_opp = build_opponent_max_scores(all_teams, points_matrix, pool_size, portfolio_size, rng, path_ratios, bracket)
 
     # Initialize with greedy EV selection
     ev_order = np.argsort(ev)[::-1]
@@ -574,29 +654,35 @@ def optimize_portfolio(
 
 # ─── Output ───────────────────────────────────────────────────────────────────
 
-def print_team_ev_table(all_teams: list[Team], points_matrix: np.ndarray, top_n: int = 25):
+def print_team_ev_table(all_teams: list[Team], points_matrix: np.ndarray,
+                        path_ratios: np.ndarray, own_probs: np.ndarray, top_n: int = 25):
     ev  = points_matrix.mean(axis=0)
     std = points_matrix.std(axis=0)
-
-    # P(team wins at least 1 game)
     p_win1 = (points_matrix > 0).mean(axis=0)
 
     ranked = sorted(all_teams, key=lambda t: ev[t.idx], reverse=True)
 
-    W = 55
+    W = 76
     print(f"\n  TOP {top_n} TEAMS BY EXPECTED POINTS")
     print("─" * W)
-    print(f"  {'#':<3} {'Team':<30} {'Sd':>3}  {'E[pts]':>7}  {'Std':>6}  {'P(wins)':>8}")
+    print(f"  {'#':<3} {'Team':<28} {'Sd':>3}  {'E[pts]':>7}  {'Std':>6}  {'P(wins)':>8}  {'Own%':>6}  {'Path':>5}")
     print("─" * W)
     for rank, t in enumerate(ranked[:top_n], 1):
-        print(f"  {rank:<3} {t.name:<30} {t.seed:>3}  {ev[t.idx]:>7.1f}  {std[t.idx]:>6.1f}  {p_win1[t.idx]*100:>7.1f}%")
+        path_str = f"{path_ratios[t.idx]:.2f}x"
+        own_str  = f"{own_probs[t.idx]*100:.0f}%"
+        print(f"  {rank:<3} {t.name:<28} {t.seed:>3}  {ev[t.idx]:>7.1f}  {std[t.idx]:>6.1f}"
+              f"  {p_win1[t.idx]*100:>7.1f}%  {own_str:>6}  {path_str:>5}")
     print("─" * W)
+    print("  Own% = estimated % of opponents picking this team."
+          "  Path = sim mean wins / avg for same seed.")
 
 
 def print_results(
     portfolio_idx: list[int],
     all_teams: list[Team],
     points_matrix: np.ndarray,
+    path_ratios: np.ndarray,
+    own_probs: np.ndarray,
     best_obj: float,
     pool_size: int,
 ):
@@ -605,17 +691,20 @@ def print_results(
     p_win1 = (points_matrix > 0).mean(axis=0)
     portfolio = [all_teams[i] for i in portfolio_idx]
 
-    W = 65
+    W = 79
     print("\n" + "═" * W)
     print("  YOUR OPTIMAL 10-TEAM PICKS  (winner-take-all)")
     print("═" * W)
-    print(f"  {'Team':<32} {'Sd':>3}  {'E[pts]':>7}  {'Std':>6}  {'P(wins)':>8}")
+    print(f"  {'Team':<28} {'Sd':>3}  {'E[pts]':>7}  {'Std':>6}  {'P(wins)':>8}  {'Own%':>6}  {'Path':>5}")
     print("─" * W)
 
     total_ev = 0.0
     for t in sorted(portfolio, key=lambda t: ev[t.idx], reverse=True):
         total_ev += ev[t.idx]
-        print(f"  {t.name:<32} {t.seed:>3}  {ev[t.idx]:>7.1f}  {std[t.idx]:>6.1f}  {p_win1[t.idx]*100:>7.1f}%")
+        path_str = f"{path_ratios[t.idx]:.2f}x"
+        own_str  = f"{own_probs[t.idx]*100:.0f}%"
+        print(f"  {t.name:<28} {t.seed:>3}  {ev[t.idx]:>7.1f}  {std[t.idx]:>6.1f}"
+              f"  {p_win1[t.idx]*100:>7.1f}%  {own_str:>6}  {path_str:>5}")
 
     print("─" * W)
     print(f"  {'Portfolio total':32}       {total_ev:>7.1f}")
@@ -636,9 +725,11 @@ def print_results(
     print("\n  STRATEGY BREAKDOWN")
     print("─" * W)
     print("  Opponent model calibrated from 2025 pool (47 players, real pick data).")
-    print("  Base pick rates by seed × moneyline multiplier (strength_ratio^1.8).")
+    print("  Pick prob = base_rate(seed) × r1_win_ratio^1.8 × path_ratio^0.6")
     print("  2025 key: Colorado St (12-seed, -148 fav) → 81% owned;")
-    print("            McNeese (12-seed, +268 dog) → 11% owned.\n")
+    print("            McNeese (12-seed, +268 dog) → 11% owned.")
+    print("  Path: teams with favorable bracket draws are more owned AND score")
+    print("        more in simulation — Path >1.20x is a meaningful edge.\n")
     if low_seeds:
         print(f"  Low seeds ({', '.join(str(t.seed) for t in low_seeds)}) — included only if EV justifies it:")
         print(f"    Few opponents pick these (low pts/win), so they provide differentiation")
@@ -654,6 +745,15 @@ def print_results(
         print(f"  Cinderella picks ({', '.join(str(t.seed) for t in very_high_seeds)}):")
         print(f"    Low probability but huge payoff — almost no opponents will have these.")
         print(f"    E.g. a 13-seed reaching the Sweet 16 = 39 pts. Decisive differentiators.")
+    # Highlight teams with favorable path
+    easy_path = [t for t in portfolio if path_ratios[t.idx] >= 1.15]
+    hard_path = [t for t in portfolio if path_ratios[t.idx] <= 0.87]
+    if easy_path:
+        names = ', '.join(f"{t.name} ({path_ratios[t.idx]:.2f}x)" for t in easy_path)
+        print(f"  Favorable draw (path ≥1.15x): {names}")
+    if hard_path:
+        names = ', '.join(f"{t.name} ({path_ratios[t.idx]:.2f}x)" for t in hard_path)
+        print(f"  Tough draw    (path ≤0.87x): {names}")
     print()
     print("  TIP: Re-run after updating bracket.json with real team names and")
     print("  use --odds-api-key for moneyline-calibrated strengths.")
@@ -744,17 +844,19 @@ def main():
     seeds_arr = np.array([t.seed for t in all_teams])
     points_matrix = wins_matrix * seeds_arr[np.newaxis, :]
 
-    print_team_ev_table(all_teams, points_matrix)
+    path_ratios = compute_path_ratios(all_teams, wins_matrix)
+    own_probs   = compute_ownership_probs(all_teams, bracket, path_ratios)
+    print_team_ev_table(all_teams, points_matrix, path_ratios, own_probs)
 
     # ── 4. Optimize ───────────────────────────────────────────
     print("\n[4/4] Optimizing portfolio for winner-take-all...")
     best_idx, best_obj = optimize_portfolio(
-        all_teams, points_matrix,
+        all_teams, points_matrix, path_ratios, bracket,
         args.pool_size, args.portfolio_size, args.sa_steps,
     )
 
     # ── Results ───────────────────────────────────────────────
-    print_results(best_idx, all_teams, points_matrix, best_obj, args.pool_size)
+    print_results(best_idx, all_teams, points_matrix, path_ratios, own_probs, best_obj, args.pool_size)
 
 
 if __name__ == "__main__":
