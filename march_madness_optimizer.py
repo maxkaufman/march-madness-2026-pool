@@ -15,8 +15,8 @@ Pipeline:
   1. Fetch live bracket from ESPN public API (falls back to bracket.json or seed labels)
   2. Optionally calibrate team strengths from live moneylines (The Odds API)
   3. Monte Carlo simulate the tournament 50,000 times
-  4. Model opponents as casual players: seed-value pickers, moneyline-aware
-     R1 pickers, high-seed gamblers, and random — no AI/simulation users assumed
+  4. Model opponents using pick probabilities calibrated from 2025 pool data
+     (47 players): base rate by seed × moneyline multiplier (ratio^1.8)
   5. Simulated annealing to find the 10 teams that maximize P(you win)
 
 Usage:
@@ -425,64 +425,33 @@ def run_simulations(bracket: dict[str, list[Team]], n: int) -> np.ndarray:
 
 # ─── Opponent Modeling ────────────────────────────────────────────────────────
 
-def _build_opponent_portfolio(
-    all_teams: list[Team],
-    ev: np.ndarray,
-    strategy: str,
-    portfolio_size: int,
-    noise_scale: float = 0.0,
-    rng: random.Random = None,
-) -> list[int]:
-    """Build one opponent's team selection given a strategy.
-
-    In a seed×wins pool, nobody rationally picks 1–4 seeds (only 1–4 pts/win).
-    Most players understand the multiplier and gravitate toward mid/high seeds.
+def _ownership_prob(seed: int, strength_ratio: float) -> float:
     """
-    n = len(all_teams)
-    seeds = np.array([t.seed for t in all_teams])
+    Probability a random pool participant picks this team.
 
-    if strategy == "seed_value":
-        # Natural intuitive player: understands seed×wins, targets the sweet spot.
-        # Penalizes seeds 1–7 (low multiplier) and seeds 14–16 (too unlikely to win).
-        # Seeds 8–13 are the perceived value range.
-        seed_mult = np.where(seeds <= 3,  0.25,
-                    np.where(seeds <= 5,  0.45,
-                    np.where(seeds <= 7,  0.70,
-                    np.where(seeds <= 10, 1.05,
-                    np.where(seeds <= 13, 1.10,
-                                          0.60)))))
-        scores = ev * seed_mult
+    Calibrated from 47-player pool (2025 data):
+      - Base rates reflect observed seed preferences across the pool.
+      - The moneyline multiplier (strength_ratio^1.8) was fitted to match
+        observed extremes: Colorado St (12-seed, -148 favourite → 81% owned)
+        vs McNeese (12-seed, +268 underdog → 11% owned).
 
-    elif strategy == "moneyline_r1":
-        # Glanced at R1 moneylines. Same seed-value base as above, but teams whose
-        # actual strength exceeds their seed baseline (i.e. looked like a good bet
-        # in R1 odds) get a boost — simulating someone who noticed "that 11-seed is
-        # basically a coin flip against the 6-seed."
-        seed_mult = np.where(seeds <= 3,  0.25,
-                    np.where(seeds <= 5,  0.45,
-                    np.where(seeds <= 7,  0.70,
-                    np.where(seeds <= 10, 1.05,
-                    np.where(seeds <= 13, 1.10,
-                                          0.60)))))
-        baseline_strength = np.array([SEED_STRENGTH.get(t.seed, 0.5) for t in all_teams])
-        actual_strength   = np.array([t.strength for t in all_teams])
-        # strength_ratio > 1 means team is "better than their seed" per moneylines
-        strength_ratio = actual_strength / np.maximum(baseline_strength, 1e-6)
-        scores = ev * seed_mult * np.sqrt(strength_ratio)
-
-    elif strategy == "high_seed_gamble":
-        # Goes for maximum seed multiplier — betting on Cinderella runs.
-        # Pure seed sort with small noise; doesn't overthink win probability.
-        scores = seeds.astype(float)
-
-    else:  # random / fallback
-        scores = ev.copy()
-
-    if noise_scale > 0 and rng:
-        scores = scores + np.array([rng.gauss(0, ev.std() * noise_scale) for _ in range(n)])
-
-    order = np.argsort(scores)[::-1]
-    return list(order[:portfolio_size])
+    strength_ratio = team.strength / SEED_STRENGTH[seed]
+      > 1 means the team is stronger than a typical team at that seed (per odds).
+    """
+    # Base pick rate by seed — how often this pool picks each seed absent odds info.
+    # Derived from 2025 pool: seeds 11–12 dominate (~40–45%), mid-seeds moderate,
+    # top/bottom seeds rarely chosen.
+    seed_base = {
+        1: 0.02, 2: 0.04, 3: 0.06,
+        4: 0.16, 5: 0.26, 6: 0.21,
+        7: 0.26, 8: 0.30, 9: 0.20,
+        10: 0.24, 11: 0.45, 12: 0.40,
+        13: 0.18, 14: 0.06, 15: 0.03, 16: 0.01,
+    }
+    base = seed_base.get(seed, 0.10)
+    # Moneyline multiplier — exponent 1.8 calibrated to 2025 observed spread
+    ml_factor = min(strength_ratio ** 1.8, 2.5)
+    return min(base * ml_factor, 0.92)
 
 
 def build_opponent_max_scores(
@@ -493,35 +462,38 @@ def build_opponent_max_scores(
     rng: random.Random,
 ) -> np.ndarray:
     """
-    Simulate pool_size-1 opponent portfolios and return an array of shape (N_SIMS,)
+    Simulate pool_size-1 opponent portfolios using empirically calibrated pick
+    probabilities from 2025 pool data, and return an array of shape (N_SIMS,)
     containing the max opponent score in each simulation.
 
-    Opponent mix (casual pool — no AI or simulation users):
-      50% Seed-value pickers: understand the multiplier, target seeds 8–13
-      30% Moneyline-informed: same as above but also checked R1 odds to
-          identify high seeds that are close calls vs. their opponent
-      15% High-seed gamblers: purely chase the biggest multiplier (seeds 13–16)
-       5% Random noise pickers
+    Each opponent portfolio is sampled via the Gumbel-max trick (weighted
+    sampling without replacement), with per-opponent log-prob noise to capture
+    individual variation. This replaces the old heuristic strategy buckets with
+    a single principled model grounded in observed 2025 ownership rates.
     """
-    ev = points_matrix.mean(axis=0)
+    n = len(all_teams)
+    baseline_str = np.array([SEED_STRENGTH.get(t.seed, 0.5) for t in all_teams])
+    actual_str    = np.array([t.strength for t in all_teams])
+    strength_ratios = actual_str / np.maximum(baseline_str, 1e-6)
+
+    pick_probs = np.array([
+        _ownership_prob(all_teams[i].seed, strength_ratios[i])
+        for i in range(n)
+    ])
+    log_probs = np.log(pick_probs + 1e-10)
+
     n_opponents = pool_size - 1
-
-    counts = {
-        "seed_value":      int(n_opponents * 0.50),
-        "moneyline_r1":    int(n_opponents * 0.30),
-        "high_seed_gamble":int(n_opponents * 0.15),
-        "random":          n_opponents - int(n_opponents * 0.50) - int(n_opponents * 0.30) - int(n_opponents * 0.15),
-    }
-
     all_opp_scores = []
-    for strategy, count in counts.items():
-        noise = 0.4 if strategy == "random" else 0.15
-        for _ in range(count):
-            port = _build_opponent_portfolio(
-                all_teams, ev, strategy, portfolio_size, noise_scale=noise, rng=rng
-            )
-            scores = points_matrix[:, port].sum(axis=1)
-            all_opp_scores.append(scores)
+    for _ in range(n_opponents):
+        # Per-opponent noise on log-probs — models individual decision variation
+        opp_log = log_probs + np.array([rng.gauss(0, 0.35) for _ in range(n)])
+        # Gumbel-max trick: weighted sampling without replacement
+        gumbel = opp_log - np.log(-np.log(
+            np.array([max(rng.random(), 1e-15) for _ in range(n)])
+        ))
+        port = list(np.argsort(gumbel)[-portfolio_size:])
+        scores = points_matrix[:, port].sum(axis=1)
+        all_opp_scores.append(scores)
 
     # Shape (N_SIMS, n_opponents) → max per sim
     opp_matrix = np.stack(all_opp_scores, axis=1)
@@ -663,9 +635,10 @@ def print_results(
 
     print("\n  STRATEGY BREAKDOWN")
     print("─" * W)
-    print("  Opponents are modeled as casual players: no AI/simulation users.")
-    print("  Most will target seeds 8–13 (the intuitive 'sweet spot' for seed×wins).")
-    print("  ~30% will also glance at R1 moneylines to find plausible upsets.\n")
+    print("  Opponent model calibrated from 2025 pool (47 players, real pick data).")
+    print("  Base pick rates by seed × moneyline multiplier (strength_ratio^1.8).")
+    print("  2025 key: Colorado St (12-seed, -148 fav) → 81% owned;")
+    print("            McNeese (12-seed, +268 dog) → 11% owned.\n")
     if low_seeds:
         print(f"  Low seeds ({', '.join(str(t.seed) for t in low_seeds)}) — included only if EV justifies it:")
         print(f"    Few opponents pick these (low pts/win), so they provide differentiation")
