@@ -317,13 +317,37 @@ def fetch_odds_api(api_key: str, bracket: dict[str, list[Team]]) -> dict[str, fl
                 for o, p in zip(outcomes, probs):
                     team_probs[o["name"]] = p / total  # remove vig
 
-    # Convert implied win probabilities to Bradley-Terry strengths.
-    # We use the prior strength as a fallback for teams not in the odds feed.
-    # If P(A beats B) = sA / (sA + sB) and we know many P values, we can
-    # solve iteratively, but a simple proxy is: strength ∝ odds_implied_prob
-    # normalized to match seed-based scale.
+    # The API returns H2H game odds (win prob 40–90%), not championship futures.
+    # We cannot use an absolute scale (ref_prob=0.20) designed for futures odds —
+    # that inflates every matched team's BT value 5–18×, making them dominate
+    # unmatched teams (whose strength stays at the seed-based SEED_STRENGTH level)
+    # in later rounds and producing unstable path ratios.
+    #
+    # Correct approach: for each R1 matchup pair (t1 vs t2), derive BT values that
+    #   (a) preserve the odds-implied R1 win probability exactly, and
+    #   (b) keep the geometric mean of the pair on the SEED_STRENGTH scale.
+    #
+    # Formula: bt1 = gm * sqrt(p1/p2),  bt2 = gm * sqrt(p2/p1)
+    #   where gm = sqrt(SEED_STRENGTH[s1] * SEED_STRENGTH[s2])
+    #
+    # Proof: bt1/(bt1+bt2) = sqrt(p1/p2) / (sqrt(p1/p2) + sqrt(p2/p1)) = p1  ✓
+    #         bt1 * bt2    = gm^2 = SEED_STRENGTH[s1] * SEED_STRENGTH[s2]     ✓
+    #
+    # For a team whose R1 opponent has no matched odds, anchor to the opponent's
+    # seed strength: bt1 = SEED_STRENGTH[s2] * p1/p2.
     if not team_probs:
         return {}
+
+    # Build R1 matchup pairs and seed lookup from bracket.
+    r1_opponent: dict[str, str] = {}
+    name_to_seed_: dict[str, int] = {}
+    for region_teams in bracket.values():
+        for t in region_teams:
+            name_to_seed_[t.name] = t.seed
+        for i in range(0, 16, 2):
+            a, b = region_teams[i].name, region_teams[i + 1].name
+            r1_opponent[a] = b
+            r1_opponent[b] = a
 
     # Build lookup: (normalized_name, original_name), sorted longest-first so
     # more-specific names (e.g. "iowa state") beat shorter ones ("iowa").
@@ -337,16 +361,38 @@ def fetch_odds_api(api_key: str, bracket: dict[str, list[Team]]) -> dict[str, fl
         key=lambda x: -len(x[0]),
     )
 
-    strengths: dict[str, float] = {}
+    # First pass: match all API names to bracket names.
+    matched_probs: dict[str, float] = {}
     for odds_name, prob in team_probs.items():
         match = _match_odds_name(odds_name, bracket_norm)
         if match:
-            # Convert championship probability to strength via logistic scaling.
-            # Empirically, 1-seeds win ~20% of titles → prob ~0.20 → strength 3.5
-            # Scale: strength = reference_strength * (p / p_reference)
-            ref_prob = 0.20
-            ref_strength = 3.50
-            strengths[match] = ref_strength * (prob / ref_prob)
+            matched_probs[match] = prob
+
+    # Second pass: convert to seed-scale BT strengths using R1 matchup pairs.
+    strengths: dict[str, float] = {}
+    processed: set[str] = set()
+    for name, p1 in matched_probs.items():
+        if name in processed:
+            continue
+        s1  = name_to_seed_.get(name, 9)
+        opp = r1_opponent.get(name)
+        p1  = max(min(p1, 0.995), 0.005)   # clamp away from 0/1
+        if opp and opp in matched_probs:
+            # Both sides of the R1 matchup are matched — use geometric mean formula.
+            s2  = name_to_seed_.get(opp, 9)
+            p2  = max(1.0 - p1, 0.005)
+            gm  = math.sqrt(SEED_STRENGTH[s1] * SEED_STRENGTH[s2])
+            strengths[name] = gm * math.sqrt(p1 / p2)
+            strengths[opp]  = gm * math.sqrt(p2 / p1)
+            processed.add(name)
+            processed.add(opp)
+        else:
+            # Only one side matched: anchor to opponent's seed-based strength.
+            s2  = name_to_seed_.get(opp, s1) if opp else s1
+            ref = SEED_STRENGTH.get(s2, SEED_STRENGTH[s1])
+            p2  = max(1.0 - p1, 0.005)
+            strengths[name] = ref * (p1 / p2)
+            processed.add(name)
 
     print(f"  Matched odds for {len(strengths)} teams")
     return strengths
